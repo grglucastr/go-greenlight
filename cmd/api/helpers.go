@@ -9,6 +9,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+type envelope map[string]any
+
 func (app *application) readIDParam(r *http.Request) (int64, error) {
 
 	// retrieve a slice containing these parameter names and values
@@ -23,9 +25,11 @@ func (app *application) readIDParam(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
+func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
 
-	resp, err := json.Marshal(data)
+	// We use no line prefix ("") and tab idents ("\t") for each element.
+	// Drawback: it's around 65% slower than json.Marshal()
+	resp, err := json.MarshalIndent(data, "", "\t")
 	if err != nil {
 		return err
 	}
