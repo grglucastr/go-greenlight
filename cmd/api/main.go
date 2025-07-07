@@ -14,13 +14,19 @@ import (
 )
 
 const version = "1.0.0"
+const FIVE_SECONDS = 5 * time.Second
+const TEN_SECONDS = 10 * time.Second
+const FIFTEEN_MINUTES = 15 * time.Minute
 
 // env can be "development", "staging", or "production"
 type config struct {
 	port int
 	env  string
 	db   struct {
-		dsn string
+		dsn          string
+		maxOpenConns int
+		maxIdleConns int
+		maxIdleTime  time.Duration
 	}
 }
 
@@ -38,6 +44,12 @@ func main() {
 	flag.IntVar(&cfg.port, "port", 4000, "HTTP server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development, staging, production)")
 	flag.StringVar(&cfg.db.dsn, "db-dns", os.Getenv("GREENLIGHT_DB_DSN"), "PostgreSQL DSN")
+
+	// flags for database
+	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
+	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
+	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", FIFTEEN_MINUTES, "PostgreSQL max connection idle time")
+
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
@@ -62,8 +74,8 @@ func main() {
 		Addr:         fmt.Sprintf(":%d", cfg.port),
 		Handler:      app.routes(),
 		IdleTimeout:  time.Minute,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		ReadTimeout:  FIVE_SECONDS,
+		WriteTimeout: TEN_SECONDS,
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
@@ -80,7 +92,11 @@ func openDB(cfg config) (*sql.DB, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	db.SetMaxOpenConns(cfg.db.maxOpenConns)
+	db.SetMaxIdleConns(cfg.db.maxIdleConns)
+	db.SetConnMaxIdleTime(cfg.db.maxIdleTime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), FIVE_SECONDS)
 
 	defer cancel()
 
