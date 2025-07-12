@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -8,6 +9,8 @@ import (
 	"github.com/grglucastr/go-greenlight/internal/validator"
 	"github.com/lib/pq"
 )
+
+const THREE_SECONDS = 3 * time.Second
 
 // All fields are exported (Capital Letter), necessary to
 // be visible because of 'enconding/json'
@@ -53,7 +56,11 @@ func (m MovieModel) Insert(movie *Movie) error {
 
 	args := []any{movie.Title, movie.Year, movie.Runtime, pq.Array(movie.Genres)}
 
-	return m.DB.QueryRow(query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+	ctx, cancel := context.WithTimeout(context.Background(), THREE_SECONDS)
+
+	defer cancel()
+
+	return m.DB.QueryRowContext(ctx, query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
 }
 
 func (m MovieModel) Get(id int64) (*Movie, error) {
@@ -65,7 +72,14 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 
 	var mo Movie
 
-	err := m.DB.QueryRow(query, id).Scan(
+	// Creates a 3-second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), THREE_SECONDS)
+
+	// Make sure that we cancel the context before the Get() method returns
+	defer cancel()
+
+	// Execute the query passing the context
+	err := m.DB.QueryRowContext(ctx, query, id).Scan(
 		&mo.ID,
 		&mo.CreatedAt,
 		&mo.Title,
@@ -104,9 +118,12 @@ func (m MovieModel) Update(movie *Movie) error {
 		movie.Version,
 	}
 
-	err := m.DB.QueryRow(query, args...).Scan(&movie.Version)
+	ctx, cancel := context.WithTimeout(context.Background(), THREE_SECONDS)
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&movie.Version)
 	if err != nil {
-		switch{
+		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			return ErrEditConflict
 		default:
@@ -124,7 +141,11 @@ func (m MovieModel) Delete(id int64) error {
 
 	query := `DELETE FROM movies WHERE ID = $1`
 
-	result, err := m.DB.Exec(query, id)
+	ctx, cancel := context.WithTimeout(context.Background(), THREE_SECONDS)
+
+	defer cancel()
+
+	result, err := m.DB.ExecContext(ctx, query, id)
 	if err != nil {
 		return err
 	}
