@@ -1,6 +1,10 @@
 package data
 
-import "github.com/grglucastr/go-greenlight/internal/validator"
+import (
+	"strings"
+
+	"github.com/grglucastr/go-greenlight/internal/validator"
+)
 
 type Filters struct {
 	Page         int
@@ -16,4 +20,26 @@ func ValidateFilters(v *validator.Validator, f Filters) {
 	v.Check(f.PageSize <= 100, "page_size", "must be a maximum of 100")
 
 	v.Check(validator.PermittedValue(f.Sort, f.SortSafelist...), "sort", "invalid sort value")
+}
+
+// Check that the client-provided Sort field matches one of the entries in our safelist
+// and if it does, extract the column name from the Sort field by stripping the leading
+// hyphen character (if one exists).
+
+func (f Filters) sortColumn() string {
+
+	for _, saveValue := range f.SortSafelist {
+		if f.Sort == saveValue {
+			return strings.TrimPrefix(f.Sort, "-")
+		}
+	}
+
+	panic("unsafe sort parameter: " + f.Sort)
+}
+
+func (f Filters) sortDirection() string {
+	if strings.HasPrefix(f.Sort, "-") {
+		return "DESC"
+	}
+	return "ASC"
 }
