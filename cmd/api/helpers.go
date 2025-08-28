@@ -145,3 +145,21 @@ func (app *application) readInt(qs url.Values, key string, defaultValue int, v *
 
 	return i
 }
+
+// This is a Go "first-class functions"
+func (app *application) background(fn func()) {
+	// Launch a background goroutine
+	go func() {
+
+		// Run a deferred function which users recover() to catch any panic, and log an
+		// error message instead of terminating the application
+		defer func() {
+			pv := recover()
+			if pv != nil {
+				app.logger.Error(fmt.Sprintf("%v", pv))
+			}
+		}()
+
+		fn()
+	}()
+}
