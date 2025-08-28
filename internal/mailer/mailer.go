@@ -104,8 +104,21 @@ func (m *Mailer) Send(recipient string, templateFile string, data any) error {
 	msg.SetBodyString(mail.TypeTextPlain, plainBody.String())
 	msg.AddAlternativeString(mail.TypeTextHTML, htmlBody.String())
 
-	// opens a connection to the SMTP server
-	// sends the message
-	// closes the connection
-	return m.client.DialAndSend(msg)
+	for i := 1; i <= 3; i++ {
+
+		// opens a connection to the SMTP server
+		// sends the message
+		// closes the connection
+		err = m.client.DialAndSend(msg)
+		if err == nil {
+			return nil
+		}
+
+		// If it didn't work, sleep for a short time and retr
+		if i != 3 {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+
+	return err
 }
