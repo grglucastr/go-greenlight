@@ -148,8 +148,14 @@ func (app *application) readInt(qs url.Values, key string, defaultValue int, v *
 
 // This is a Go "first-class functions"
 func (app *application) background(fn func()) {
+	// Increment the WaitGroup counter
+	app.wg.Add(1)
+
 	// Launch a background goroutine
 	go func() {
+
+		// Use defer to decrement the WaitGroup counter before the goroutine returns
+		defer app.wg.Done()
 
 		// Run a deferred function which users recover() to catch any panic, and log an
 		// error message instead of terminating the application
