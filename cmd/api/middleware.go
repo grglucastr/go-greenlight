@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"net/http"
 	"strings"
@@ -211,6 +212,7 @@ func (app *application) requirePermission(code string, next http.HandlerFunc) ht
 
 	return app.requireActivatedUser(fn)
 }
+
 func (app *application) enableCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -243,5 +245,31 @@ func (app *application) enableCORS(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+func (app *application) metrics(next http.Handler) http.Handler {
+	var (
+		totalRequestReceived            = expvar.NewInt("total_request_received")
+		totalResponsesSent              = expvar.NewInt("total_responses_sent")
+		totalProcessingTimeMicroseconds = expvar.NewInt("total_processing_time_μs")
+	)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Increment the number of request received by 1
+		totalRequestReceived.Add(1)
+
+		// Call the next handler in the chain
+		next.ServeHTTP(w, r)
+
+		// On the way back up the middleware chain, increment the number of responses
+		// sent by 1
+		totalResponsesSent.Add(1)
+
+		//Calculate the duration
+		duration := time.Since(start).Microseconds()
+		totalProcessingTimeMicroseconds.Add(duration)
 	})
 }
