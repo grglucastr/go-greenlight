@@ -5,6 +5,7 @@ import (
 	"expvar"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,48 @@ import (
 	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 )
+
+type metricsResponseWriter struct {
+	wrapped       http.ResponseWriter
+	statusCode    int
+	headerWritten bool
+}
+
+func newMetricsResponseWriter(w http.ResponseWriter) *metricsResponseWriter {
+	return &metricsResponseWriter{
+		wrapped:    w,
+		statusCode: http.StatusOK,
+	}
+}
+
+// The Header() method is a simple 'pass through' to the Header() of the
+// wrapped http.ResponseWriter
+func (mw *metricsResponseWriter) Header() http.Header {
+	return mw.wrapped.Header()
+}
+
+// The WriteHeader() is also a 'pass through' to the WriteHeader() method
+// We also record the status code
+// Set the headerWritter field to true to indicate that the HTTP response headers have
+// now been written
+func (mw *metricsResponseWriter) WriteHeader(statusCode int) {
+	mw.wrapped.WriteHeader(statusCode)
+
+	if !mw.headerWritten {
+		mw.statusCode = statusCode
+		mw.headerWritten = true
+	}
+}
+
+// Another 'pass through'
+func (mw *metricsResponseWriter) Write(b []byte) (int, error) {
+	mw.headerWritten = true
+	return mw.wrapped.Write(b)
+}
+
+func (mw *metricsResponseWriter) Unwrap() http.ResponseWriter {
+	return mw.wrapped
+}
 
 func (app *application) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -253,6 +296,7 @@ func (app *application) metrics(next http.Handler) http.Handler {
 		totalRequestReceived            = expvar.NewInt("total_request_received")
 		totalResponsesSent              = expvar.NewInt("total_responses_sent")
 		totalProcessingTimeMicroseconds = expvar.NewInt("total_processing_time_μs")
+		totalResponsesSentByStatus      = expvar.NewMap("total_responses_sent_by_status")
 	)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -261,8 +305,14 @@ func (app *application) metrics(next http.Handler) http.Handler {
 		// Increment the number of request received by 1
 		totalRequestReceived.Add(1)
 
-		// Call the next handler in the chain
-		next.ServeHTTP(w, r)
+		// wraps the original http.ResponseWriter value
+		// that the metrics middleware received
+		mw := newMetricsResponseWriter(w)
+
+		// Call the next handler in the chain using the new metricsResponseWriter
+		next.ServeHTTP(mw, r)
+
+		totalResponsesSentByStatus.Add(strconv.Itoa(mw.statusCode), 1)
 
 		// On the way back up the middleware chain, increment the number of responses
 		// sent by 1
