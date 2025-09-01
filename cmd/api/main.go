@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"expvar"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"runtime"
@@ -14,13 +15,17 @@ import (
 
 	"github.com/grglucastr/go-greenlight/internal/data"
 	"github.com/grglucastr/go-greenlight/internal/mailer"
+	"github.com/grglucastr/go-greenlight/internal/vcs"
 	_ "github.com/lib/pq"
 )
 
-const version = "1.0.0"
 const FIVE_SECONDS = 5 * time.Second
 const TEN_SECONDS = 10 * time.Second
 const FIFTEEN_MINUTES = 15 * time.Minute
+
+var (
+	version = vcs.Version()
+)
 
 // env can be "development", "staging", or "production"
 type config struct {
@@ -89,7 +94,14 @@ func main() {
 		return nil
 	})
 
+	displayVersion := flag.Bool("version", false, "Display version and exit")
+
 	flag.Parse()
+
+	if *displayVersion {
+		fmt.Printf("Version: \t%s\n", version)
+		os.Exit(0)
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
