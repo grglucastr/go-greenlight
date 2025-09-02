@@ -75,5 +75,37 @@ audit:
 .PHONY: build/api
 build/api:
 	@echo 'Building cmd/api'
+	mkdir ./bin/linux_amd64
 	GOOS=windows GOARCH=amd64 go build -ldflags="-s" -o=./bin/api ./cmd/api
-	GOOS=linux GOARCH=amd64 go build -ldflags="-s" -o=./bin/linux_amd64 ./cmd/api
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s" -o=./bin/linux_amd64/api ./cmd/api
+
+# ==================================================================================== #
+# PRODUCTION
+# ==================================================================================== #
+
+production_host_ip = '143.244.174.176'
+ssh_prod_key = '~/.ssh/id_rsa_greenlight'
+
+## production/connect: connect to the production server
+.PHONY: production/connect
+production/connect:
+	ssh greenlight@${production_host_ip} -i ${ssh_prod_key}
+
+
+## production/deploy/api: deploy the api to production
+.PHONY: production/deploy/api
+production/deploy/api:
+	ssh -i ${ssh_prod_key} -t greenlight@${production_host_ip} 'rm api'
+	scp -i ${ssh_prod_key} ./bin/linux_amd64/api greenlight@${production_host_ip}:~
+	scp -i ${ssh_prod_key}  -r ./migrations greenlight@${production_host_ip}:~
+	scp -i ${ssh_prod_key} ./remote/production/api.service greenlight@${production_host_ip}:~
+	scp -i ${ssh_prod_key} ./remote/production/Caddyfile greenlight@${production_host_ip}:~
+	ssh -i ${ssh_prod_key} -t greenlight@${production_host_ip} '\
+		migrate -path ~/migrations -database $$GREENLIGHT_DB_DSN up \
+		&& sudo chmod +x api \
+		&& sudo mv ~/api.service /etc/systemd/system/ \
+		&& sudo systemctl enable api \
+		&& sudo systemctl restart api \
+		&& sudo mv ~/Caddyfile /etc/caddy/ \
+		&& sudo systemctl reload caddy \
+		'
